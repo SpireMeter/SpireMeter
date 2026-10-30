@@ -1,0 +1,11 @@
+name: Idea
+description: Something the meter could show or do.
+labels: [idea]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: What you'd like to see, and when it would help you (a fight, a run, deciding on cards...).
+    validations:
+      required: true

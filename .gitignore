@@ -1,0 +1,11 @@
+# Build output
+bin/
+obj/
+*.user
+
+# Local only: staged builds, release zips, backups and reference copies
+dist/
+release/
+backups/
+mods/
+baseline/

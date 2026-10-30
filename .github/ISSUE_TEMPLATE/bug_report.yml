@@ -1,0 +1,52 @@
+name: Bug report
+description: The meter showed a wrong number, broke the layout, or crashed.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! The quickest way in: in the game, click **Unlock** then **Report a bug** on the meter.
+        It opens this form with your version filled in and shows `bug-report.txt`, which you drag into the last box.
+  - type: input
+    id: version
+    attributes:
+      label: SpireMeter version
+      description: Filled in by the Report a bug button. Otherwise it's in mods\SpireMeter\SpireMeter.json
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Playing
+      options:
+        - Single player
+        - Co-op (2 players)
+        - Co-op (3 players)
+        - Co-op (4 players)
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did and what the meter showed. Screenshots help a lot.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: For damage bugs, the enemy's HP before and after is perfect.
+    validations:
+      required: true
+  - type: textarea
+    id: cards
+    attributes:
+      label: Cards, relics or powers involved
+      placeholder: Strangle, Deadly Poison, Orichalcum...
+  - type: textarea
+    id: log
+    attributes:
+      label: bug-report.txt
+      description: Drag the file here. It's in %APPDATA%\SlayTheSpire2\SpireMeter\ if the Explorer window closed. It holds this session's meter log, including player names.

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Install help and the latest version
+    url: https://github.com/SpireMeter/SpireMeter#install
+    about: How to install, update and uninstall SpireMeter.

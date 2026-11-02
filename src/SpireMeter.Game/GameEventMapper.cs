@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -27,6 +28,8 @@ public static class GameEventMapper
 
 	private static readonly FieldInfo? StartTimeField = AccessTools.Field(typeof(RunManager), "_startTime");
 
+	private static readonly FieldInfo? PrevRunTimeField = AccessTools.Field(typeof(RunManager), "_prevSessionRunTime");
+
 	private static bool _fallbackLogged;
 
 	/// <summary>
@@ -36,10 +39,11 @@ public static class GameEventMapper
 	/// </summary>
 	public static RunStarted RunStarted(IRunState runState)
 	{
-		long startTime = ReadStartTime();
+		long startTime = ReadLong(StartTimeField);
 		if (startTime > 0)
 		{
-			return new RunStarted($"{runState.Rng.StringSeed}@{startTime}");
+			// Time played in earlier sessions is only there when the run came from a save.
+			return new RunStarted($"{runState.Rng.StringSeed}@{startTime}", ReadLong(PrevRunTimeField) > 0);
 		}
 		if (!_fallbackLogged)
 		{
@@ -49,11 +53,11 @@ public static class GameEventMapper
 		return new RunStarted(RunIds.GetValue(runState, (IRunState rs) => $"{rs.Rng.StringSeed}#{++_runCounter}"));
 	}
 
-	private static long ReadStartTime()
+	private static long ReadLong(FieldInfo? field)
 	{
 		try
 		{
-			return (StartTimeField?.GetValue(RunManager.Instance) as long?) ?? 0;
+			return (field?.GetValue(RunManager.Instance) as long?) ?? 0;
 		}
 		catch (Exception)
 		{
@@ -65,11 +69,94 @@ public static class GameEventMapper
 	{
 		// Anything left on the tracker from out of combat would mislabel the first block of the fight.
 		SourceTracker.Clear();
+		PoisonTicks.Clear();
+		_combat = combatState;
 		return new CombatStarted(combatState.Players.Select(ToPlayerRef).ToList(), combatState.Enemies.Select(ToEnemyRef).ToList());
+	}
+
+	/// <summary>Poison ticks dealt so far in each enemy's current Poison trigger.</summary>
+	private static readonly Dictionary<Creature, int> PoisonTicks = new Dictionary<Creature, int>();
+
+	private static ICombatState? _combat;
+
+	public static void PoisonTriggered(PoisonPower poison)
+	{
+		if (poison.Owner != null)
+		{
+			PoisonTicks[poison.Owner] = 0;
+		}
+	}
+
+	/// <summary>
+	/// Poison triggers once, plus once more per Accelerant stack the party holds. The first tick belongs to whoever
+	/// applied the poison; each extra one to the player whose Accelerant stack paid for it.
+	/// </summary>
+	private static PoisonDamage PoisonTick(Creature target, int amount)
+	{
+		if (!PoisonTicks.TryGetValue(target, out int tick))
+		{
+			return new PoisonDamage(ToEnemyRef(target), amount);
+		}
+		PoisonTicks[target] = tick + 1;
+		try
+		{
+			int extra = tick - 1;
+			foreach (Creature holder in Accelerators(target))
+			{
+				AccelerantPower? power = holder.GetPower<AccelerantPower>();
+				int stacks = power?.Amount ?? 0;
+				if (extra >= 0 && extra < stacks && power != null && (holder.Player ?? holder.PetOwner) is Player player)
+				{
+					return new PoisonDamage(ToEnemyRef(target), amount, ToPlayerRef(player), "power:" + power.Id, power.Title.GetFormattedText());
+				}
+				extra -= stacks;
+			}
+		}
+		catch (Exception)
+		{
+		}
+		return new PoisonDamage(ToEnemyRef(target), amount);
+	}
+
+	private static IEnumerable<Creature> Accelerators(Creature enemy)
+	{
+		return enemy.CombatState?.GetOpponentsOf(enemy).Where((Creature c) => c.IsAlive && c.GetPowerAmount<AccelerantPower>() > 0) ?? Enumerable.Empty<Creature>();
+	}
+
+	/// <summary>
+	/// What Poison will deal to each enemy at the start of its next turn, Accelerant included, keyed by enemy id.
+	/// The game works this out but never shows it.
+	/// </summary>
+	public static Dictionary<string, PoisonForecast> PoisonNextTurn()
+	{
+		Dictionary<string, PoisonForecast> result = new Dictionary<string, PoisonForecast>();
+		try
+		{
+			if (_combat == null)
+			{
+				return result;
+			}
+			foreach (Creature enemy in _combat.Enemies)
+			{
+				PoisonPower? poison = enemy.IsAlive ? enemy.GetPower<PoisonPower>() : null;
+				if (poison == null || poison.Amount <= 0)
+				{
+					continue;
+				}
+				int ticks = Math.Min(poison.Amount, 1 + Accelerators(enemy).Sum((Creature c) => c.GetPowerAmount<AccelerantPower>()));
+				result[ToEnemyRef(enemy).Id] = new PoisonForecast(poison.CalculateTotalDamageNextTurn(), ticks, poison.Amount);
+			}
+		}
+		catch (Exception)
+		{
+		}
+		return result;
 	}
 
 	public static CombatEnded CombatEnded(IRunState runState)
 	{
+		_combat = null;
+		PoisonTicks.Clear();
 		return new CombatEnded(runState.Players.ToDictionary((Player p) => p.NetId, (Player p) => p.ExtraFields.DamageDealt));
 	}
 
@@ -81,7 +168,7 @@ public static class GameEventMapper
 		}
 		if (IsPoisonTick(choiceContext, dealer, props, target, cardSource))
 		{
-			return new PoisonDamage(ToEnemyRef(target), results.UnblockedDamage);
+			return PoisonTick(target, results.UnblockedDamage);
 		}
 		Source source = FindSource(cardSource, choiceContext.LastInvolvedModel);
 		Player? player = CreditedPlayer(dealer, cardSource) ?? source.Owner;
@@ -114,7 +201,7 @@ public static class GameEventMapper
 	{
 		Player? receiver = creature.Player ?? creature.PetOwner;
 		// Block hooks carry no choice context, so a relic or power behind the block is read from the tracker.
-		Source source = FindSource(cardSource, SourceTracker.Current);
+		Source source = FindSource(cardSource, SourceTracker.Current ?? SourceTracker.FlashedBy(creature));
 		Player? giver = source.Owner ?? receiver;
 		if (receiver == null || giver == null || amount <= 0m)
 		{
@@ -129,7 +216,7 @@ public static class GameEventMapper
 		{
 			return null;
 		}
-		Source source = FindSource(cardSource, choiceContext?.LastInvolvedModel ?? SourceTracker.Current);
+		Source source = FindSource(cardSource, choiceContext?.LastInvolvedModel ?? SourceTracker.Current ?? SourceTracker.FlashedBy(applier));
 		Player? player = CreditedPlayer(applier, cardSource) ?? source.Owner;
 		if (player == null)
 		{

@@ -20,6 +20,7 @@ void Fight(MeterState s, int aliceDmg, int bobDmg, bool end = true) {
     if (end) s.Apply(new CombatEnded(new System.Collections.Generic.Dictionary<ulong, int>()));
 }
 long Dmg(MeterState s, ulong id) => s.Snapshot().Players.First(p => p.Player.Id == id).Damage;
+MeterState Resume(string runId) { var s = new MeterState(NewStore()); s.Apply(new RunStarted(runId, Resumed: true)); return s; }
 
 // Run A: two fights, then "crash" in the middle of a third.
 var s1 = new MeterState(NewStore());
@@ -57,6 +58,23 @@ s3.Apply(new RunStarted("SEEDA@100"));
 Check("run A history intact", Dmg(s3, 1) == 16);
 s3.Apply(new RunStarted("SEEDA@200"));
 Check("run B history intact", Dmg(s3, 1) == 3);
+
+// Co-op joiner: a fresh run is stamped with their own clock, a reloaded one with the host's.
+var sj = new MeterState(NewStore());
+sj.Apply(new RunStarted("SEEDJ@1000"));
+Fight(sj, 8, 9);
+var sj2 = new MeterState(NewStore());
+sj2.Apply(new RunStarted("SEEDJ@995", Resumed: true));
+Check("joiner resume finds run despite clock skew", Dmg(sj2, 1) == 8);
+Fight(sj2, 1, 1);
+Check("joiner resume keeps counting", Dmg(Resume("SEEDJ@995"), 1) == 9);
+var sj3 = new MeterState(NewStore());
+sj3.Apply(new RunStarted("SEEDJ@1100"));
+Check("fresh run near same time stays separate", sj3.Snapshot().TotalDamage == 0);
+var sj4 = new MeterState(NewStore());
+sj4.Apply(new RunStarted("SEEDJ@5000", Resumed: true));
+Check("resume far off in time stays separate", sj4.Snapshot().TotalDamage == 0);
+Check("resume picks closest start", Dmg(Resume("SEEDA@110"), 1) == 16);
 
 // Corrupt file must not throw and must yield an empty meter.
 File.WriteAllText(Directory.GetFiles(dir, "SEEDA@100.json").First(), "{ not json");
@@ -149,6 +167,17 @@ sdm.Apply(new DoomDamage(worm, 9)); sdm.Apply(new DebuffApplied(pa1, worm, "POIS
 sdm.Apply(new RunStarted("SEEDM@1"));
 var sdms = sdm.Snapshot();
 Check("unknown doom shared, splits survive reload", sdms.DoomDamage == 9 && sdms.TotalDamage == 12 && sdms.Players.Single().Split.Poison == 3 && sdms.FightPlayers!.Single().Split.Poison == 3);foreach (var p in demo.Players) Console.WriteLine($"  {p.Player.Name}: {p.Damage} dmg, {p.BlockGained} blk ({p.BlockParty} party), {p.Cards.Count} cards");Console.WriteLine(Directory.GetFiles(dir).Length + " files in store");
+// Accelerant: the first poison tick goes to the appliers, each extra tick to the Accelerant player.
+var sacc = new MeterState(NewStore()); sacc.Apply(new RunStarted("SEEDACC@1"));
+sacc.Apply(new CombatStarted(new[] { alice, bob }, new[] { enemy }));
+sacc.Apply(new DebuffApplied(bob, enemy, "POISON", "Poison", 5, "DEADLY", "Deadly Poison", true));
+sacc.Apply(new PoisonDamage(enemy, 5));
+sacc.Apply(new PoisonDamage(enemy, 4, alice, "power:ACCELERANT", "Accelerant"));
+var accSnap = sacc.Snapshot();
+Check("accelerant tick credited to its player", Dmg(sacc, 1) == 4 && Dmg(sacc, 2) == 5);
+Check("accelerant tick counts as poison", accSnap.Players.First(p => p.Player.Id == 1).Split.Poison == 4);
+Check("accelerant shows as a source", accSnap.Players.First(p => p.Player.Id == 1).Cards.Any(c => c.Name == "Accelerant" && c.Damage == 4));
+Check("accelerant tick counts on the enemy", accSnap.Fight.First().Total == 9);
 Console.WriteLine(File.ReadAllText(Directory.GetFiles(dir, "SEEDA@200.json").First()).Substring(0, 300));
 Directory.Delete(dir, true);
 

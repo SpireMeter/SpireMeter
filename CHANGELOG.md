@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.1
+
+- Co-op: a player who rejoins a saved run keeps their numbers (before, only the host did).
+- Accelerant: the extra poison ticks it causes are credited to Accelerant.
+- Noxious Fumes and other start-of-turn powers are named instead of showing as "Unknown source".
+- Fight tab: each poisoned enemy shows the poison it takes next turn, Accelerant included. Hover for details.
+
 ## 1.0.0
 
 First release.

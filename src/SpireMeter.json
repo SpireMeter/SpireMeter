@@ -3,7 +3,7 @@
   "name": "SpireMeter",
   "author": "SpireMeter",
   "description": "Live damage meter for Slay the Spire 2, made for co-op. Reads the game only and never changes gameplay. Also keeps your progression safe on the first modded launch.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "has_pck": false,
   "has_dll": true,
   "dependencies": [],

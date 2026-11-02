@@ -271,7 +271,7 @@ public sealed class MeterState
 			{
 				// A different run: pick up its saved totals if it is a reloaded one, otherwise start from zero.
 				_runId = runStarted.RunId;
-				_committed = _store?.Load(runStarted.RunId);
+				_committed = _store?.Load(runStarted.RunId, runStarted.Resumed);
 			}
 			// The same run again means the game reloaded it (or a new fight began): both mean "back to the last finished fight".
 			Restore(_committed);
@@ -359,6 +359,20 @@ public sealed class MeterState
 			if (poisonDamage.Amount <= 0)
 			{
 				return;
+			}
+			if (poisonDamage.Booster is PlayerRef booster)
+			{
+				// An extra tick from Accelerant is the Accelerant player's damage, not the poison appliers'.
+				PlayerStats stats = GetPlayer(booster);
+				stats.Damage += poisonDamage.Amount;
+				stats.Poison += poisonDamage.Amount;
+				AddTurnDamage(booster, poisonDamage.Amount);
+				AddFightSplit(booster, 2, poisonDamage.Amount);
+				stats.Cards.AddDamage(poisonDamage.BoosterId, poisonDamage.BoosterName, poisonDamage.Amount);
+				FightEnemy fightEnemy = GetFightEnemy(poisonDamage.Target);
+				fightEnemy.Total += poisonDamage.Amount;
+				fightEnemy.ByPlayer[booster.Id] = fightEnemy.ByPlayer.GetValueOrDefault(booster.Id) + poisonDamage.Amount;
+				break;
 			}
 			CreditStacks("poison", poisonDamage.Target, poisonDamage.Amount);
 			break;

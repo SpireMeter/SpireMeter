@@ -16,7 +16,7 @@ public static class ModEntry
 {
 	public const string ModId = "SpireMeter";
 
-	public const string Version = "1.0.0";
+	public const string Version = "1.0.1";
 
 	private static Harmony? _harmony;
 

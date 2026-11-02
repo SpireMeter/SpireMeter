@@ -153,6 +153,10 @@ public sealed class MeterWindow
 
 	private long _shownVersion = -1L;
 
+	private Dictionary<string, PoisonForecast> _poisonNext = new Dictionary<string, PoisonForecast>();
+
+	private string _shownPoisonKey = "";
+
 	private bool _dirty = true;
 
 	public MeterWindow(CanvasLayer layer)
@@ -674,12 +678,16 @@ public sealed class MeterWindow
 			ShowUpdate(newer);
 		}
 		MeterState state = MeterRecorder.State;
-		if (!_dirty && state.Version == _shownVersion)
+		// Poison and Accelerant can change without a meter event, so the forecast is compared on its own.
+		_poisonNext = GameEventMapper.PoisonNextTurn();
+		string poisonKey = string.Join(";", _poisonNext.Select((KeyValuePair<string, PoisonForecast> p) => $"{p.Key}={p.Value}"));
+		if (!_dirty && state.Version == _shownVersion && poisonKey == _shownPoisonKey)
 		{
 			return;
 		}
 		_dirty = false;
 		_shownVersion = state.Version;
+		_shownPoisonKey = poisonKey;
 		MeterSnapshot meterSnapshot = state.Snapshot();
 		_title.Text = ((_collapsed && meterSnapshot.TotalDamage > 0) ? $"SpireMeter · {meterSnapshot.TotalDamage}" : "SpireMeter");
 		if (_collapsed)
@@ -1001,7 +1009,15 @@ public sealed class MeterWindow
 				text += $" #{dictionary2[text]}";
 			}
 			// Enemies are context, not the point: one dim line each, damage taken in the same column.
-			AddCols("   " + text, new string[2] { Num(item.Total), "" }, PartyCols, 13, Muted, new Color[2] { Muted, Muted });
+			// The poison it takes next turn goes in the spare column: the game works it out but never shows it.
+			PoisonForecast next = default(PoisonForecast);
+			bool poisoned = s.InCombat && _poisonNext.TryGetValue(item.Enemy.Id, out next);
+			PanelContainer row = AddCols("   " + text, new string[2] { Num(item.Total), poisoned ? "+" + next.Damage : "" }, PartyCols, 13, Muted, new Color[2] { Muted, PoisonColor });
+			if (poisoned)
+			{
+				row.MouseFilter = Control.MouseFilterEnum.Pass;
+				row.TooltipText = $"Poison next turn: {next.Damage} damage" + ((next.Ticks > 1) ? $"\n{next.Stacks} poison triggers {next.Ticks} times (Accelerant)" : $"\n{next.Stacks} poison");
+			}
 		}
 		AddLegend();
 	}

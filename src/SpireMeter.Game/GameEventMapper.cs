@@ -170,7 +170,7 @@ public static class GameEventMapper
 		{
 			return PoisonTick(target, results.UnblockedDamage);
 		}
-		Source source = FindSource(cardSource, choiceContext.LastInvolvedModel);
+		Source source = FindSource(cardSource, SourceTracker.HookCurrent ?? choiceContext.LastInvolvedModel);
 		Player? player = CreditedPlayer(dealer, cardSource) ?? source.Owner;
 		if (player == null)
 		{
@@ -186,7 +186,7 @@ public static class GameEventMapper
 		{
 			return null;
 		}
-		Source source = FindSource(null, choiceContext.LastInvolvedModel);
+		Source source = FindSource(null, SourceTracker.HookCurrent ?? choiceContext.LastInvolvedModel);
 		Player? val = CreditedPlayer(remover, null) ?? source.Owner;
 		int num = Math.Min(target.Block, (int)Math.Min(amount, 2147483647m));
 		if (val == null || num <= 0)
@@ -216,7 +216,7 @@ public static class GameEventMapper
 		{
 			return null;
 		}
-		Source source = FindSource(cardSource, choiceContext?.LastInvolvedModel ?? SourceTracker.Current ?? SourceTracker.FlashedBy(applier));
+		Source source = FindSource(cardSource, SourceTracker.HookCurrent ?? choiceContext?.LastInvolvedModel ?? SourceTracker.Current ?? SourceTracker.FlashedBy(applier));
 		Player? player = CreditedPlayer(applier, cardSource) ?? source.Owner;
 		if (player == null)
 		{

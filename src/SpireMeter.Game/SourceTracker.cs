@@ -14,22 +14,52 @@ public static class SourceTracker
 {
 	private const int MaxDepth = 64;
 
-	private static readonly List<AbstractModel> Active = new List<AbstractModel>();
+	/// <param name="Hook">Entered through a hook the game does not push (arrow hooks, cards generated).</param>
+	private readonly record struct Entry(AbstractModel Model, bool Hook);
 
-	public static AbstractModel? Current => (Active.Count == 0) ? null : Active[Active.Count - 1];
+	private static readonly List<Entry> Active = new List<Entry>();
+
+	public static AbstractModel? Current => (Active.Count == 0) ? null : Active[Active.Count - 1].Model;
+
+	/// <summary>
+	/// The model reacting in an unpushed hook, when nothing has been pushed on top of it. Its context still names
+	/// the card that set it off, so without this Explosive Arrows' damage would go to the card that shot the arrow.
+	/// </summary>
+	public static AbstractModel? HookCurrent => (Active.Count == 0 || !Active[Active.Count - 1].Hook) ? null : Active[Active.Count - 1].Model;
 
 	public static void Pushed(AbstractModel model)
+	{
+		Add(new Entry(model, Hook: false));
+	}
+
+	public static void Popped(AbstractModel model)
+	{
+		Remove(new Entry(model, Hook: false));
+	}
+
+	public static void HookEntered(AbstractModel model)
+	{
+		Add(new Entry(model, Hook: true));
+	}
+
+	/// <summary>Called when a model's unpushed hook is done, even if it failed.</summary>
+	public static void HookFinished(AbstractModel model)
+	{
+		Remove(new Entry(model, Hook: true));
+	}
+
+	private static void Add(Entry entry)
 	{
 		if (Active.Count >= MaxDepth)
 		{
 			Active.RemoveAt(0);
 		}
-		Active.Add(model);
+		Active.Add(entry);
 	}
 
-	public static void Popped(AbstractModel model)
+	private static void Remove(Entry entry)
 	{
-		int index = Active.LastIndexOf(model);
+		int index = Active.LastIndexOf(entry);
 		if (index >= 0)
 		{
 			Active.RemoveAt(index);

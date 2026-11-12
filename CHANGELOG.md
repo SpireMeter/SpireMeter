@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.2
+
+- Support for the Fool: Explosive Arrows, Covering Fire, All Is Well and other powers and relics that react to arrows or created cards are credited by name, instead of to the card that set them off or "Unknown source". Covering Fire counts as the Fool's party block.
+- Works with the game patch that added the Fool.
+
 ## 1.0.1
 
 - Co-op: a player who rejoins a saved run keeps their numbers (before, only the host did).
